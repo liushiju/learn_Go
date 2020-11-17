@@ -1,0 +1,17 @@
+package main
+
+import "fmt"
+
+type Age uint
+
+func (age Age) String() {
+	fmt.Println("this age is:", age)
+}
+
+func main() {
+	age := Age(25)
+	// 方法赋值给变量，方法表达式
+	sm := Age.String
+	// 通过变量，要传一个接收者进行调用也就是age
+	sm(age)
+}
