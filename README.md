@@ -13,6 +13,8 @@
 
 ### [06 | struct 和 interface：结构体与接口都实现了哪些功能？](part01/ch06)
 
+### [07 | 错误处理：如何通过 error、deferred、panic 等处理错误？](part01/ch07)
+
 ## 第二部分：Go 语言高效并发
 
 ## 第三部分：Go 语言深入理解
