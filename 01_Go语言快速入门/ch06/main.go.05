@@ -1,0 +1,27 @@
+package main
+
+import "fmt"
+
+type person struct {
+	name string
+	age  uint
+	address
+}
+
+type address struct {
+	province string
+	city     string
+}
+
+func main() {
+	p := person{
+		age:  25,
+		name: "Hanson",
+		address: address{
+			province: "广东",
+			city:     "广州",
+		},
+	}
+	fmt.Println(p.province)
+
+}
