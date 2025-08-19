@@ -1,0 +1,16 @@
+function handleCode(codestr) {
+    codestr = codestr.replace(
+        /<pre>(.|\n)*?<\/pre>/gi,
+        function(mactch, capture) {
+            var paramsArr = mactch.match(/<code(.*?)class=[\'\"]?([^\'\"]*)[\'\"](.*?)>/i)
+            if(paramsArr && paramsArr[2]) {
+                mactch = mactch ? mactch : 'Plain Text'
+                var languageType = paramsArr[2].split('language-')[1]
+                return '<div data-syntax="'+languageType+'">'+mactch+'</div>'
+            } else {
+                return '<div data-syntax="Plain Text">'+mactch+'</div>'
+            }
+        }
+    )
+    return codestr
+}

@@ -1,0 +1,84 @@
+var getTotalNum;
+var isEdit = false;
+var EditType = 'wukong'
+var $VM = Vue.createApp({
+    data() {
+        return {
+            toobarconfig: {
+                isfixed: true,
+                fixedTop: 140,
+                defaultTopVal: 0
+            },
+            wukhelper: show,
+            catalogue: true,
+            editorHeight: min_height,
+            wukcontent: submitForm.content,
+            title: {
+                needTitle: true,
+                titleNumber: 100,
+                titleValue: submitForm.title
+            },
+            minHeight: min_height + 'px',
+            totalNumber: 0,
+            settings: {
+                "baseUrl": blog_url,
+                "imgUpload": blog_url + "blog/editor-img-upload",
+                "uploadSign": blog_url + "blogger/upload-sign",
+                "getoss": blog_url + "blogger/getoss",
+                "watermark": "?x-oss-process=image/watermark,size_14,text_QDUxQ1RP5Y2a5a6i,color_FFFFFF,t_100,g_se,x_10,y_10,shadow_20,type_ZmFuZ3poZW5naGVpdGk=",
+
+            },
+
+        }
+    },
+    // watch: {
+    //     wukcontent: function(value) {
+    //         var _this = this;
+    //         // console.log('vue设置编辑器值',new Date().getTime()/1000)
+    //         blog_detail.methods.setForm()
+    //         debounce(listenTime(), 100)
+    //         getTotalNum = setTimeout(function() {
+    //             clearTimeout(getTotalNum)
+    //             var getContentNum = getWriteContent(value)
+    //             _this.totalNumber = getContentNum
+    //             changeNum(getContentNum)
+    //         },100)
+    //         isEdit=true;
+    //     },
+    //     title:function(){
+    //         blog_detail.methods.setForm()
+    //         listenTime()
+    //     }
+    // },
+    methods: {
+        changeTitleValue(val) {
+            const { type, value } = val;
+            var _this = this;
+            if (type === 'title') {
+                this.title.titleValue = value
+            } else {
+                this.wukcontent = value
+                getTotalNum = setTimeout(function () {
+                    clearTimeout(getTotalNum)
+                    var getContentNum = getWriteContent(value)
+                    _this.totalNumber = getContentNum
+                    changeNum(getContentNum)
+                }, 100)
+                isEdit = true;
+            }
+            blog_detail.methods.setForm();
+
+            debounce(listenTime(), 100)
+
+        }
+    },
+    components: {
+        "engine-wuk": wuk
+    },
+    mounted() {
+        window.addEventListener('resize', () => {
+            min_height = window.document.body.clientHeight - 326;
+            this.editorHeight = min_height
+        }, false)
+    }
+}).mount('#appCeramics')

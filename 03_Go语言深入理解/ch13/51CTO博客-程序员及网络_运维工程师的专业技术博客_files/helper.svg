@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>ic/帮助备份 3</title>
+    <defs>
+        <linearGradient x1="14.0234375%" y1="86.1245728%" x2="100%" y2="0%" id="linearGradient-1">
+            <stop stop-color="#FFFFFF" offset="0%"></stop>
+            <stop stop-color="#3E71F6" stop-opacity="0.8" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="页面-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="ic/帮助备份-3">
+            <rect id="矩形" fill="#D8D8D8" opacity="0" x="0" y="0" width="24" height="24"></rect>
+            <circle id="椭圆形" fill="url(#linearGradient-1)" cx="13" cy="11" r="5"></circle>
+            <path d="M14,20 L14,22 L10,22 L10,20 L14,20 Z M12,3 C15.8659932,3 19,6.13400675 19,10 C19,13.8579391 15.879038,16.9869385 12.0241529,16.9999592 L16,17 L16,19 L8,19 L8,17 L11.976,16.999 L11.7593502,16.995941 C8.00478338,16.8690987 5,13.7854517 5,10 C5,6.13400675 8.13400675,3 12,3 Z M12,5 C9.23857625,5 7,7.23857625 7,10 C7,12.7614237 9.23857625,15 12,15 C14.7614237,15 17,12.7614237 17,10 C17,7.23857625 14.7614237,5 12,5 Z" id="形状结合" fill="#313D54" fill-rule="nonzero"></path>
+        </g>
+    </g>
+</svg>

@@ -1,0 +1,43 @@
+let isSave=false
+function listenTime() {
+    if (!isSave && blog_detail){
+            if (EditType == 'wukong') {
+                if (isEdit) {
+                    isEdit = false;
+                    debounce(blog_detail.methods.drafForm(function () { }, 1),3000)
+                }
+            } else {
+                debounce(blog_detail.methods.drafForm(function () { }, 1), 3000)
+            }
+        }
+    // var x ;
+    // var y ;
+    // //监听鼠标
+    // document.onmousemove = function (event) {
+    //     var x1 = event.clientX;
+    //     var y1 = event.clientY;
+    //     if (x != x1 || y != y1) {
+    //         count = 0;
+    //     }
+    //     x = x1;
+    //     y = y1;
+    // };
+
+    // //监听键盘
+    // document.onkeydown = function () {
+    //     count = 0;
+    // };
+} 
+function debounce(func, wait) {
+    let timeout;
+    return function () {
+        let context = this;
+        let args = arguments;
+
+        if (timeout) clearTimeout(timeout);
+
+        timeout = setTimeout(() => {
+            func.apply(context, args)
+        }, wait);
+    }
+}

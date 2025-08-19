@@ -1,0 +1,1479 @@
+var blog_detail = null
+var isBanned = false;
+var bannedData = '';
+var noCheck = false;
+
+$(function () {
+    var $data, $methods, $onFun;
+    blog_detail = {
+        data: {
+            leverCateData: null,//分类数据
+            form: submitForm,//发布的表单
+            addImgArr: [],// 封面图
+            replaceIndex: -1,//封面上传时渲染的序号
+            infoOption: null //获取图片上传需要的sign值
+        },
+        init: function () {
+            $data = blog_detail.data;
+            $methods = blog_detail.methods;
+            $onFun = blog_detail.onFun;
+            //设置title值 
+            //判断是否来自1024活动页
+            var isEditor = $data.form.is_old == 1 || $data.form.is_old == 2 //判断是否为wukong编辑器
+
+            //获取标签的数量,不超过5个继续显示输入框
+            var tagList = $('.tage-list-arr').children('span')
+            if (tagList.length >= 5) $('#tag-input').hide()
+            if ($data.form.blog_id || $data.form.blog_id) {
+                $('.base-settings').show()
+            }
+
+            //根据url参数判断编辑器类型
+            if (isEditor) {
+                $('.change-tooltip').text('切换为Markdown编辑器')
+                if (window.location.href.indexOf('from=1024') > -1) {
+                    $VM.title.titleValue = '# 聊一聊悟空编辑器 #'
+                } else {
+                    $VM.title.titleValue = $data.form.title
+                }
+            } else {
+              
+                $('.change-tooltip').text('切换为WuKong编辑器')
+                $vm.title = $data.form.title
+            }
+            if(blogId){
+                $(".save-draft").hide()
+                $(".draft-save-time").hide()
+            }
+            //获取草稿数量
+            $methods.getDraftNum()
+            //获取分类数据
+            $methods.getCateData()
+            //如果是草稿或者已发布的内容存在标签或者简介时第一时间查询下是否存在违禁词
+            if ($data.form.tag || $data.form.abstract) {
+                $methods.request("blogger-ajax/check-txt", 'post', { tag: $data.form.tag, abstract: $data.form.abstract }, function (res) {
+                    if (res.data.tag.length || res.data.abstract.length) {
+                        isBanned = true; //标记存在违禁词
+                        bannedData = res.data //违禁词数据
+                    }
+                })
+            }
+            //设置值
+            $data.form.is_old = $('#is_old').val()
+            $data.form.blog_id = $('#blog_id').val()
+            $data.form[$('#csrf').attr('name')] = $('#csrf').val()
+            // $methods.resetDialog(oldDialogForm)
+            $methods.setSelectName('essay-type', $data.form.blog_type)
+            $methods.setSelectName('copy-notice', $data.form.copy_code)
+            $onFun()
+
+
+            $('.img_type[value=' + $data.form.banner_type + ']').click()
+            // 判断声明是否展示
+            $data.form.blog_type == 1 ? $('.copy-notice').show() : $('.copy-notice').hide()
+            //获取图片上传需要的sign值
+            if (window.infoOption) {
+                return $data.infoOption = window.infoOption
+            } else {
+                //调用接口重新获取
+                $methods.request("/blogger/upload-sign", 'GET', {}, function (res) {
+                    $data.infoOption = res.data
+                })
+            }
+
+        },
+        onFun: function () {
+            $('body').on({ //点击下拉框时
+                'click': function () {
+                    $(this).parent('.pull-parent').siblings('.el-popper').toggle()
+                },
+                'blur': function (e) {
+                    $(this).parent('.pull-parent').siblings('.el-popper').hide()
+                    var select_val = $(this).val()
+                    if (select_val) return
+                    $(this).parent('.pull-parent').siblings('.error').show()
+                    // 判断是否是必填项
+                    var hasMust = $(this).parents('.must')
+                    if (hasMust.length > 0) {
+                        $(this).addClass('err_line')
+                    }
+                }
+            }, '.pull-down')
+                .on({ //选择一级分类
+                    "click": function () {
+                        var value = $(this).attr('value')
+                        if (!$(this).hasClass('select_item_check')) {
+                            $(this).addClass('select_item_check').siblings().removeClass('select_item_check')
+                            $data.form.pid = value;
+                            $data.form.cate_id = '';//设置一级分类并重新选择二级分类 
+                            $methods.getTwoCateData(value)
+                        }
+
+                    },
+                }, ".types_content .select_item")
+                .on({ //二级分类的选择
+                    "click": function () {
+                        var value = $(this).attr('value')
+                        //只有当重新选择二级分类时才会继续
+                        if (!$(this).hasClass('second-types-item-check')) {
+                            $(this).addClass('second-types-item-check').siblings().removeClass('second-types-item-check')
+                            $data.form.cate_id = value;//二级分类赋值
+                            $('.second-types-error').hide() //隐藏错提示
+                        }
+                    }
+                }, ".second-types-content .second-types-item")
+                .on({ // 选择下拉框分类
+                    'mousedown': function () {
+                        var c_dom = $(this),
+                            text = c_dom.children('span').text(),
+                            fication_dom = $(this).parents('.classification'),
+                            value = $(this).attr('value')
+                        fication_dom.find('.pull-down').val(text)
+                        fication_dom.find('.error').hide()
+                        c_dom.parents('.el-popper').hide()
+                        $(this).parents('.classification').find('.pull-down').removeClass('err_line')
+
+                        var hasPersonType = $(this).parents('.person-type')
+                        var aticleType = $(this).parents('.aticle-type')
+
+
+                        if (hasPersonType.length > 0) { // 个人分类
+                            $data.form.custom_id = value;
+                        } else if (aticleType.length > 0) { // 文章类型
+                            $data.form.blog_type = value;
+                            if (value == 1) { //选择原创
+                                $('.copy-notice .pull-down').val('转载请注明出处')
+                                $('.copy-notice').show()
+                                $data.form.copy_code = '1';
+                            } else {
+                                $('.copy-notice').hide()
+                                $data.form.copy_code = '';
+                            }
+                        } else { // 版权声明
+                            $data.form.copy_code = value;
+                        }
+                    }
+                }, '.classification ul li')
+                .on({ //标签输入
+                    'keyup': function (e) {
+                        if (e.keyCode != 188 && e.keyCode != 186 && e.keyCode != 59) return;
+                        $methods.setBlogTag()
+                    },
+                    'blur': function () {
+                        var input_val = $(this).val()
+                        if (input_val) { //输入值后渲染页面并赋值
+                            $methods.setBlogTag()
+                        } else {
+                            $methods.showTagTip()//没有输入错提示
+                        }
+
+                    },
+                }, '#tag-input')
+                .on({ //删除标签
+                    'mousedown': function () {
+                        $(this).parent('span').remove()
+                        $('.tag-banned').hide()
+                        $('#tag-input').show()
+                        bannedData.tag = [] //默认删除违禁词了，清空之前存储的违禁词数据
+                        if ($('#submitForm').text() === '继续发布') {
+                            $('#submitForm').text('发布').attr('nocheck', false)
+                        }
+                        $methods.showTagTip()
+                    }
+                }, '.has-list .editorcancel')
+                .on({ //公开、私密 选择
+                    'click': function () {
+                        var checkStatus = $(this).is(':checked')
+                        if (checkStatus) {
+                            // $data.form.is_hide = $(this).attr('value');
+                            $(this).parent('.el-checkbox').siblings('.el-checkbox').children('.pub_type').attr('checked', false)
+                        } else {
+                            $(this).prop('checked', true)
+                        }
+                        $data.form.is_hide = $(this).val()
+                    }
+                }, '.pub_type')
+                .on({ // 封面设置
+                    'click': function () {
+                        var checkStatus = $(this).is(':checked')
+                        $data.form.banner_type = $(this).val()
+                        if (checkStatus) {
+                            $(this).parent('.el-checkbox').siblings('.el-checkbox').children('.img_type').attr('checked', false)
+                        } else {
+                            $(this).prop('checked', true)
+                        }
+                        $methods.judgeImgCover()
+                        $('.img-error').hide()
+                    }
+                }, '.img_type')
+                .on({ // 高级选项打开、关闭
+                    'click': function () {
+                        $('.ao-body').toggle()
+                    }
+                }, '.senior .title')
+                .on({ //选择高级选项
+                    'click': function () {
+                        var status = $(this).is(':checked')
+                        var keyStr = $(this).attr('name')
+                        var keyVal = $(this).attr('value')
+                        $data.form[keyStr] = status ? keyVal : ''
+                    }
+                }, '.senior_checkbox')
+                .on({ // 关闭弹窗
+                    'click': function () {
+                        var len = $(this).parents('.change_editor').length
+                        var prohi_words_len = $(this).parents('.prohi_words').length
+                        var domStr = ""
+                        if (len > 0) {
+                            domStr = 'change_editor'
+                        } else if (prohi_words_len > 0) {
+                            domStr = 'prohi_words'
+                        } else {
+                            domStr = 'editor-dialog__wrapper'
+                        }
+                        $methods.changePop(0, domStr)
+                        if ($(this).hasClass('re_edit')) return
+                        oldDialogForm.pid = $data.form.pid
+                        $methods.resetDialog(oldDialogForm)
+                        $('.edit-submit').attr('disabled', false)
+                        $('.edit-submit .edit-submit-text').text('发布文章')
+                    }
+                }, '.close-dialog')
+                .on({ // 打开弹窗
+                    'click': function () {
+                        var title = $data.form.title
+                        if (!title) {
+                            $('.tooltip-back').trigger('click')
+                            $methods.showTip('请填写标题')
+                            return
+                        }
+                        if (($data.form.is_old == 1 || $data.form.is_old == 2) && $VM.totalNumber == 0 || ($data.form.is_old != 1 && $data.form.is_old != 2 && $vm.md_content == "")) return $methods.showTip('正文内容不能为空')
+                        $methods.getBanned()
+                    }
+                }, '.edit-submit')
+                .on({ //点击发布
+                    'click': function () {
+                        //判断当前发布是否无视敏感词提示
+                        $data.form.abstract = $('#abstractData').val()
+                        $data.form.tag = $methods.getTagStr()// 设置标签
+                        if ($(this).attr('noCheck') == 'true') {
+                            $methods.submitForm(1)
+                        } else {
+                            $methods.submitForm()
+                        }
+                    }
+                }, '#submitForm')
+                .on({ // 继续发布
+                    'click': function () {
+                        // $methods.submitForm()
+                        var setting_dom = $('.base-settings')
+                        var nowShowSettings = $data.form.pid && $data.form.custom_id && $data.form.tag
+                        if (nowShowSettings && setting_dom.length) {
+                            // console.log('老文章文章点击发布')
+                            $('.edit-submit').attr('disabled', 'disabled')
+                            $('.edit-submit .edit-submit-text').text('发布中...')
+                            if (!isBanned) {
+                                $methods.submitForm()
+                            } else {
+                                $methods.changePop(2, 'editor-dialog__wrapper')
+                            }
+
+                        } else {
+                            $methods.getArticleTag($data.form.content)
+                        }
+                        $methods.changePop(0, 'prohi_words')
+                        noCheck = true
+                    }
+                }, '.continue_pub')
+                .on({ //点击草稿箱
+                    'click': function () {
+                        $methods.drafForm(function () { }, 1)
+                        window.open(blog_url + 'creative-center/draft', "_blank")
+
+                    }
+                }, '.edit-save-draft')
+                .on({  //切换编辑器
+                    'click': function () {
+                        var tipTitle = $(this).children('.change-tooltip').text()
+                        $('.change_editor .tip').text(tipTitle)
+                        $methods.changePop(1, 'change_editor')
+                    }
+                }, '.change-editor')
+                .on({ // 直接切换编辑器
+                    'click': function () {
+                        $methods.changeEditor()
+                    }
+                }, '.dir_switch')
+                .on({ //点击保存切换
+                    'click': function () {
+                        $methods.drafForm(function () {
+                            $methods.changeEditor()
+                        })
+                    }
+                }, '.save_switch')
+                .on({ //返回顶部
+                    'click': function () {
+                        $('body,html').animate({
+                            scrollTop: 0
+                        }, 500);
+                    }
+                }, '.tooltip-back')
+                .on({ //基础信息点击
+                    'click': function () {
+                        $methods.changeDialogText()
+                        $methods.changePop(2, 'editor-dialog__wrapper')
+                    }
+                }, '.base-settings')
+                // .on({ // 鼠标悬浮tip 后台页面
+                //     'mouseenter': function () {
+                //         var title = $(this).attr('aria-label')
+                //         var t_dom = "<div class='s_title t_title'>" + title + "</div>"
+                //         $(this).append(t_dom)
+                //     },
+                //     'mouseleave': function () {
+                //         $('.t_title').remove()
+                //     }
+                // }, '.tox-toolbar__group button, .tox-toolbar__group .tox-split-button')
+                .on({
+                    'change': function () {
+                        $('.abstract-banned').hide();
+                        $('#abstractData').removeClass('err_line')
+                        bannedData.abstract = []
+                        if ($('#submitForm').text() === '继续发布') {
+                            $('#submitForm').text('发布').attr('nocheck', false)
+
+                        }
+                    }
+                }, '#abstractData')
+                .on({
+                    'click': function () {
+                        $('.ec-edit-helper-content').removeClass('fadeInRightBig').addClass('fadeOutRightBig')
+                         setTimeout(function(){
+                             $('.ec-edit-helper-content').hide()
+                         },1100) 
+                       
+                    }
+                }, ".helper-close")
+                .on({
+                    "click": function () {
+                        $(".ec-edit-helper-content").removeClass('fadeOutRightBig ').show().addClass('fadeInRightBig')
+                    }
+                }, ".helper-btn")
+                .on({ // 输入标题
+                    'input': function () {
+                        $methods.setForm()
+                        $methods.setTitleNum()
+                    },
+
+                }, '.title_input')
+                .on({
+                    "mouseover":function(e){
+                        var  usertop=0;
+                        
+                        var index = $('.editor-tooltip .tooltip-item').index(this)
+                      
+                        $('.tooltip-background').show().css("top", (index * 50) + "px")
+                    }
+                },'.editor-tooltip .tooltip-item')
+                .on({
+                    "mouseleave": function () {
+                        $('.tooltip-background').hide().css("top", "-53px")
+                    }
+                }, '.tooltip-box')
+        },
+        methods: {
+            //接口封装-兼容没有登陆
+            request(myurl, method, data, requestSuccess, requestError) {
+                return $.ajax({
+                    type: method,
+                    url: blog_url + myurl,
+                    data: data,
+                    timeout: 30000,
+                    dataType: "json",
+                    success: function (res) {
+                        if (res.status == -9 && res.msg.indexOf('未登') != -1) {
+                            localStorage.setItem('nologindraft', JSON.stringify({
+                                'type': 1,
+                                'form': $data.form
+                            }))
+                            var localHref = window.location.href
+                            window.location.href = option.homeUrl + 'index?reback=' + localHref
+                            return
+                        } else {
+                            requestSuccess ? requestSuccess(res) : function () { }
+
+                        }
+
+                    },
+                    error: function (err) {
+                        requestError ? requestError(err) : function (err) { console.log(res) }
+                    }
+                });
+            },
+
+            //检查违禁词
+            getBanned: function () {
+                $methods.request('blogger-ajax/check-txt', 'post',
+                    { content: $data.form.content, title: $data.form.title, tag: $data.form.tag, abstract: $data.form.abstract },
+                    function (res) {
+                        if ((res.data.tag && res.data.tag.length) || (res.data.abstract && res.data.abstract.length)) {
+                            isBanned = true;
+                            bannedData = res.data
+                        }
+                        if ((res.data.title && res.data.title.length) || (res.data.content && res.data.content.length)) {
+                            $methods.changePop(0, 'editor-dialog__wrapper')
+                            $('.backend_body').html('')
+                            var badCheck = res.data
+                            if (badCheck) {
+                                $.each(badCheck, function (key, val) {
+                                    if (key == 'content' && badCheck.content.length) {
+                                        $('.backend_body').append($methods.getBlack('正文', val.join(',')))
+                                    }
+                                    if (key == 'title' && badCheck.title.length) {
+                                        $('.backend_body').append($methods.getBlack('标题', val.join(',')))
+                                    }
+                                })
+                            }
+
+                            $methods.changePop(1, 'prohi_words')
+                        } else {
+                            var setting_dom = $('.base-settings')
+                            var nowShowSettings = $data.form.pid && $data.form.custom_id && $data.form.tag
+                            if (nowShowSettings && setting_dom.length) {
+                                if (!isBanned) {
+                                    $('.edit-submit').attr('disabled', 'disabled')
+                                    $('.edit-submit .edit-submit-text').text('发布中...')
+                                    $methods.submitForm()
+                                } else {
+                                    $('#submitForm').text('发布')
+                                    $methods.changePop(2, 'editor-dialog__wrapper')
+                                }
+                                // $methods.getArticleTag($data.form.content)
+                            } else {
+                                $methods.getArticleTag($data.form.content)
+                                // $methods.changePop(2, 'editor-dialog__wrapper')
+                            }
+
+                        }
+                    })
+            },
+            //获取草稿箱数量
+            getDraftNum: function () {
+                $methods.request("blogger-ajax/draft-num", "post", {}, function (res) {
+                    if (Number(res.data.draft_num) > 0) {
+                        $('#draft_num').text(res.data.draft_num)
+                    }
+                })
+            },
+            //根据文章内容生成弹窗
+            getArticleTag: function (params) {
+                $methods.request("blogger-ajax/auto-relate-tag", "post", { content: params }, function (res) {
+                    if (res.data.length) {
+                        var dom = $('#tag-input')
+                        dom.val('')
+                        let tagBox = res.data
+                        var str = ''
+                        $('.has-list').html('')
+                        for (var i = 0; i < tagBox.length; i++) {
+                            str += '<span>' + tagBox[i] + '<i class="iconeditor editorcancel"></i></span>'
+                        }
+                        $('.add_tag').removeClass('err_line')
+                        $('.tab-list').siblings('.error').hide()
+
+                        if (tagBox.length == 5) {
+                            $('#tag-input').hide()
+                        }
+
+                        $('.has-list').append(str)
+                    }
+                    $methods.changeDialogText()
+                    $methods.changePop(2, 'editor-dialog__wrapper')
+                })
+
+            },
+
+            // 获取图片上传地址
+            postUploadoss: function (options, callback) {
+                $.ajax({
+                    type: 'POST',
+                    url: blog_url + '/blogger/getoss',
+                    data: options,
+                    success: function (res) {
+                        if (res.status) return callback(res.data)
+                    },
+                    error: function (error) {
+                        console.log(error)
+                    }
+                })
+            },
+            // 上传图片到阿里云
+            uploadimg: function (dataOss, callback) {
+                var formData = new FormData();
+                formData.append("OSSAccessKeyId", dataOss.OSSAccessKeyId);
+                formData.append("policy", dataOss.policy);
+                formData.append("signature", dataOss.signature);
+                //文件名字
+                formData.append("key", dataOss.key);
+                formData.append("dir", dataOss.dir);
+                formData.append("success_action_status", "200");
+                //文件必须声明在最后，否则异常
+                formData.append("file", dataOss.file);
+                $.ajax({
+                    url: dataOss.host,
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function (res) {
+                        callback(dataOss.host + dataOss.dir)
+                    },
+                    error: function (error) {
+                        console.log(error)
+                    }
+                })
+            },
+
+            // 立即上传图片到阿里云
+            uploadNow: function (file, callback) {
+                var infoOption = $data.infoOption
+                if (infoOption) {
+                    var options = {
+                        uploadSign: infoOption.sign,
+                        ext: file.type,
+                        name: file.name,
+                        uploadType: "image",
+                    };
+                    $methods.postUploadoss(options, function (res) {
+                        var host = res.host,
+                            policy = res.policy,
+                            accessid = res.accessid,
+                            signature = res.signature,
+                            dir = res.dir
+                        var dataOss = {
+                            host: host,
+                            policy: policy,
+                            OSSAccessKeyId: accessid,
+                            callback: "",
+                            signature: signature,
+                            dir: dir,
+                            key: dir,
+                            success_action_status: 200,
+                            file: file
+                        };
+                        $methods.uploadimg(dataOss, function (res) {
+                            callback(res)
+                        })
+                    })
+                }
+            },
+            getSelfType: function () { // 个人分类
+                if ($('#selfType').length > 0) {
+                    if (!$data.form.custom_id) return $('#selfType').val("")
+                    var text = $('.selfType_list li[value=' + $data.form.custom_id + ']').children('span').text()
+                    $('#selfType').val(text)
+                }
+            },
+            judgeState: function () { // 判断声明是否展示
+                $data.form.blog_type == 1 ? $('.copy-notice').show() : $('.copy-notice').hide()
+            },
+            //重置弹窗数据
+            resetDialog: function (resetData) {
+                $.extend($data.form, resetData)
+                $($('oneLever').find('select_item').attr('value') == $data.form.pid).addClass('select_item_check').siblings().removeClass('select_item_check')
+                if ($data.form.pid) {
+                    $methods.getTwoCateData($data.form.pid)
+                }
+                $methods.getSelfType()
+                $('.tage-list-arr').html($methods.resetTag($data.form.tag)) // 标签
+                var list_text = $('.tage-list-arr').text()
+                list_text ? $('#tag-input').trigger('blur') : ''
+                $('#abstractData').val($data.form.abstract) // 文章摘要
+                $methods.setSelectName('essay-type', $data.form.blog_type) // 文章类型
+                $methods.setSelectName('copy-notice', $data.form.copy_code) //声明
+                $methods.judgeState()
+                if ($data.form['is_hide'] == 0) { //公开私密
+                    $('#open').prop('checked', 'checked')
+                    $('#privacy').prop('checked', false)
+                } else {
+                    $('#open').prop('checked', false)
+                    $('#privacy').prop('checked', 'checked')
+                }
+                var topTimeStatus = $data.form.top_time != 0 ? 'checkbox' : false
+                $('#topTime').prop('checked', topTimeStatus) // 置顶
+                var topTimeStatus = $data.form.is_comment == 2 ? 'checkbox' : false
+                $('#isComment').prop('checked', topTimeStatus) // 禁止评论
+            },
+            resetTag: function (tag) {
+                if (!tag) return ""
+                var tagArr = tag.split(',')
+                if (tagArr.length == 0) return $('.tage-list-arr').html('')
+                var tagStr = tagArr.reduce(function (total, curent) {
+                    total += '<span>' + curent + '<i class="iconeditor editorcancel"></i></span>'
+                    return total
+                }, '')
+                return tagStr
+            },
+            publicImg: function (callback) { // 检测图片是否加载完成
+                if (typeof $VM == 'undefined') {
+                    var imgArr = $('.v-show-content img')
+                    if (imgArr.length == 0) return callback(true)
+                    for (var i = 0, len = imgArr.length; i < len; i++) {
+                        var src = $(imgArr[i]).attr('src')
+                        if (src.indexOf('51cto') == -1) {
+                            if (cacheImg.indexOf(src) != -1 || cacheImg.indexOf(decodeURI(src)) != -1) {
+                                return callback(true)
+                            }
+                            return callback(false)
+                        }
+                    }
+                    return callback(true)
+                }
+                var wukcontent = $VM.wukcontent
+                var reg = /<img.*?(?:>|\/>)/gi
+                var imgArr = wukcontent.match(reg)
+                if (imgArr && imgArr.length > 0) {
+                    for (var i = 0; i < imgArr.length; i++) {
+                        var item = imgArr[i]
+                        var url = item.match(/src=[\'\"]?([^\'\"]*)[\'\"]?/i)
+                        if (url[1].indexOf('51cto') == -1) {
+                            if (cacheImg.indexOf(url[1]) != -1 || cacheImg.indexOf(decodeURI(url[1])) != -1 || url[1].indexOf('svg') != -1) {
+                                return callback(true)
+                            }
+                            return callback(false);
+                        }
+                    }
+                }
+                return callback(true)
+            },
+            getSelectText: function (dom, id) { // 获取下拉框的text，为重置
+                var c_dom = $(dom + ' li[value="' + id + '"] span')
+                if (c_dom.length == 0) return "";
+                return c_dom.text()
+            },
+            // 设置编辑器字数
+            setTitleNum: function () {
+                var input_val = $('.title_input').val()
+                if (typeof input_val !== 'undefined') {
+                    var input_len = input_val.length
+                 
+                    if (input_len > 0) {
+                        $('.c_num').css({
+                            'color': '#6b7484',
+                            'fontWeight': '400'
+                        })
+                    } else {
+                        $('.c_num').css({
+                            'color': '#9399a6',
+                            'fontWeight': '300'
+                        })
+                    }
+                    $('.c_num').text(input_len)
+                }
+            },
+            setHeaderText: function () { // 修改header中的切换名
+                var text = ($data.form.is_old == 1 || $data.form.is_old == 2) ? '切换为Markdown编辑器' : '切换为WuKong编辑器'
+                $('.chenge_editor_text').text(text)
+            },
+            // 分类数据获取
+            getCateData: function () {
+                $.ajax({
+                    type: "get",
+                    url: blog_url + 'category/get-child',
+                    success: function (res) {
+                        if (res.status == 1) {
+                            $data.leverCateData = res.data
+                            $methods.getOneCateData()
+                        }
+                    }
+                });
+            },
+            //一级分类的生成
+            getOneCateData: function () {
+                var str = "";
+                var firstKey = '';
+                $.each($data.leverCateData, function (key, val) {
+                    var classData = ''
+                    if ($data.form.pid) {
+                        if (val.id == $data.form.pid) {
+                            firstKey = key;
+                            classData = "select_item_check"
+                        }
+                    }
+
+                    str += '<div class="select_item  ' + classData + '" value="' + val.id + '"><span>' + val.name + '</span></div>'
+                })
+                $('#oneLever').html(str)
+                if ($data.form.pid) {
+                    $methods.getTwoCateData($data.form.pid)
+                }
+            },
+            // 设置二级分类
+            getTwoCateData: function (id, callback) {
+                if (!id && callback) return callback("")
+                var twoLever = $data.leverCateData[id].item
+                var str = "";
+                var selectData = $data.form.cate_id || ''
+                $.each(twoLever, function (index, val) {
+                    var tagClass = ""
+                    if (selectData && selectData == val.id) {
+                        tagClass = "second-types-item-check"
+                    }
+                    str += '<div class="second-types-item  ' + tagClass + ' " value="' + val.id + '"><span>' + val.name + '</span></div>'
+                })
+                $('#twoLever').html(str)
+                if (!callback) return
+                callback(twoLever)
+            },
+            // 改变弹窗状态
+            changePop: function (status, dom) {
+                if (status) {
+                    $('html').css('overflow', 'hidden')
+                    $('.Mask').show()
+                    $('.' + dom).show()
+                } else {
+                    $('html').css('overflow', 'auto')
+                    $('.Mask').hide()
+                    $('.' + dom).hide()
+                    $('#submitForm').removeClass('baseinfo')
+                }
+            },
+            // 设置标签
+            setBlogTag: function () {
+                var dom = $('#tag-input')
+                var new_val = $.trim(dom.val())
+                new_val = new_val.replace(/,|，|;|；/g, '');
+                dom.val('')
+                if (new_val) {
+                    var str = '<span>' + new_val + '<i class="iconeditor editorcancel"></i></span>'
+                    $('.has-list').append(str)
+                }
+                $('.add_tag').removeClass('err_line')
+                $('.tab-list').siblings('.error').hide()
+                var len = $('.has-list>span').length
+                if (len == 5) return $('#tag-input').hide()
+            },
+            // 标签是否展示错误提示
+            showTagTip: function () {
+                var len = $('.tage-list-arr span').length
+                if (len > 0) {
+                    $('.tag-error').hide()
+                    $('.add_tag').removeClass('err_line')
+                } else {
+                    $('.tag-error').show()
+                    $('.add_tag').addClass('err_line')
+                }
+            },
+            // 获取tag
+            getTagStr: function () {
+                var str = ""
+                $.each($('.tage-list-arr span'), function (index, item) {
+                    str += $(item).text() + ','
+                })
+                str = str.substr(0, str.length - 1)
+                return str
+            },
+            // 获取高级选项选中数据
+            getSeniorData: function () {
+                var str = ""
+                $("input[name='senior']:checked").each(function () {
+                    var val = $(this).val()
+                    str += val + ','
+                })
+                str = str.substr(0, str.length - 1)
+                return str
+            },
+            // 显示提示框
+            showTip: function (text, callback) {
+                $('.must-tip').text(text).show()
+                setTimeout(function () {
+                    $('.must-tip').hide()
+                    if (callback) {
+                        callback()
+                    }
+                }, 1800)
+            },
+            // 设置form
+            setForm: function () {
+                if ($data.form.is_old == 1 || $data.form.is_old == 2) {
+                    $data.form.content = $VM.wukcontent;
+                    $data.form.title = $VM.title.titleValue;
+                } else {
+                    $data.form.content = $vm.md_content
+                    $data.form.title = $('.title_input').val()
+                }
+
+                // console.log('jq设置编辑器值', new Date().getTime() / 1000)
+                $data.form.abstract = $('#abstractData').val()
+                $data.form['tag'] = $methods.getTagStr()// 设置标签
+                if (isBanned) {
+                    if (bannedData.tag && bannedData.tag.length) {
+                        $('.tag-banned').text('存在违禁词: ' + bannedData.tag.join(',') + '').show()
+                        $('.add_tag').addClass('err_line')
+                    }
+                    if (bannedData.abstract && bannedData.abstract.length) {
+                        $('.abstract-banned').text('存在违禁词: ' + bannedData.abstract.join(',') + '').show()
+                        $('#abstractData').addClass('err_line')
+                    }
+                    $('#submitForm').text('继续发布').attr('disabled', false).attr('noCheck', true)
+                } else {
+                    $('.tag-banned').hide();
+                    $('.add_tag').removeClass('err_line')
+                    $('.abstract-banned').hide();
+                    $('#abstractData').removeClass('err_line')
+                }
+
+
+            },
+            judgeDialogForm: function (callback) { //验证弹窗表单
+                var pid = $data.form.pid
+                var cate_id = Number($data.form.cate_id)
+                var tag = $data.form.tag
+                if (!pid) {
+                    $('.second-types-error').text('请选择一级分类').show()
+
+                }
+                if (!cate_id) {
+                    $('.second-types-error').text('请选择二级分类').show()
+                }
+                if (!tag) {
+                    $('.tag-error').show()
+                    $('.add_tag').addClass('err_line')
+                }
+                var imgUpload = $methods.getImgTypeData()
+                callback(Boolean(pid && cate_id && tag && imgUpload))
+            },
+            // 提交表单
+            submitForm: function (contine) {
+                var has_base_info = $('#submitForm').hasClass('baseinfo')
+                if (has_base_info) {
+                    $methods.judgeDialogForm(function (status) {
+                        if (status) {
+                            $methods.changeDialogData()
+                        }
+                    })
+                    return;
+                } else {
+                    if (!contine) {
+                        $.ajax({
+                            type: "post",
+                            url: blog_url + "blogger-ajax/check-txt",
+                            data: { tag: $data.form.tag, abstract: $data.form.abstract },
+                            dataType: "json",
+                            success: function (res) {
+                                if (res.status == -9 && res.msg.indexOf('未登') != -1) {
+                                    localStorage.setItem('nologindraft', JSON.stringify({
+                                        'type': 1,
+                                        'form': $data.form
+                                    }))
+                                    var localHref = window.location.href
+                                    window.location.href = option.homeUrl + 'index?reback=' + localHref
+                                } else {
+                                    var badCheck = res.data
+
+                                    if ((badCheck.abstract && badCheck.abstract.length) || (badCheck.tag && badCheck.tag.length)) {
+                                        if (badCheck.tag && badCheck.tag.length) {
+                                            $('.tag-banned').text('存在违禁词:' + badCheck.tag + '').show()
+                                            $('.add_tag').addClass('err_line')
+                                        }
+                                        if (badCheck.abstract && badCheck.abstract.length) {
+                                            $('.abstract-banned').text('存在违禁词:' + badCheck.abstract + '').show()
+                                            $('#abstractData').addClass('err_line')
+                                        }
+                                        $('#submitForm').text('继续发布').attr('disabled', false).attr('noCheck', true)
+                                    } else {
+                                        if ($data.showsettings) {
+                                            $methods.publishNow(contine);
+                                        } else {
+                                            $methods.judgeDialogForm(function (status) {
+                                                if (status) {
+                                                    $methods.publishNow(contine)
+                                                }
+                                            })
+                                        }
+
+                                    }
+                                }
+
+                            },
+                            error: function (err) {
+                                console.log(err)
+
+                            }
+                        });
+                    } else {
+                        if ($data.showsettings) {
+                            $methods.publishNow(contine);
+                        } else {
+                            $methods.judgeDialogForm(function (status) {
+                                if (status) {
+                                    $methods.publishNow(contine)
+                                }
+                            })
+                        }
+                    }
+
+                }
+
+
+            },
+            sendFormData: function (formData) {
+                var img_urls = formData.img_urls,
+                    banner_type = formData.banner_type
+                if (banner_type == 0) {
+                    formData.img_urls = []
+                } else if (banner_type == 1) {
+                    formData.img_urls = img_urls[0] ? [img_urls[0]] : []
+                }
+                return formData
+            },
+            // 表单验证及发布
+            publishNow: function (contine) {
+                var blog_type = $data.form.blog_type
+                var copy_code = $data.form.copy_code
+                $methods.changeSubmitText('发布中...', "disabled")
+                if (!contine && !noCheck) {
+                    $data.form['check'] = 1
+                } else {
+                    delete $data.form.check
+                }
+                var formData = $methods.sendFormData($data.form)
+                $.ajax({
+                    type: "post",
+                    url: blog_url + "blogger/publish",
+                    data: formData,
+                    dataType: "json",
+                    success: function (res) {
+                        if (res.status == -9 && res.msg.indexOf('未登') != -1) {
+                            localStorage.setItem('nologindraft', JSON.stringify({
+                                'type': 1,
+                                'form': $data.form
+                            }))
+                            var localHref = window.location.href
+                            window.location.href = option.homeUrl + 'index?reback=' + localHref
+                            return
+                        }
+                        $methods.changeSubmitText('发布', false)
+                        $('.edit-submit').attr('disabled', false)
+                        $('.edit-submit .edit-submit-text').text('发布文章')
+                        if (res.status) {
+                            if (res.msg == "success") {
+
+                                window.location.href = res.data.request
+                            }
+                        } else {
+                            var badCheck = res.data.badCheck
+                            if (badCheck.tag) {
+                                $('.tag-banned').text('存在违禁词:' + badCheck.tag + '').show()
+                                $('.add_tag').addClass('err_line')
+                            }
+                            if (badCheck.abstract) {
+                                $('.abstract-banned').text('存在违禁词:' + badCheck.abstract + '').show()
+                                $('#abstractData').addClass('err_line')
+                            }
+                            $('#submitForm').text('继续发布').attr('disabled', false).attr('noCheck', true)
+
+
+
+                        }
+                    },
+                    error: function (err) {
+                        $methods.changeSubmitText('发布', false)
+                    }
+                });
+            },
+            // 修改弹窗数据（确定）
+            changeDialogData: function () {
+                $methods.changeSubmitText('保存中...', "disabled")
+                // var form_c = $data.form
+                var form_c = $methods.sendFormData($data.form)
+                oldDialogForm = {
+                    pid: form_c.pid, // 一级分类
+                    cate_id: form_c.cate_id, // 二级分类
+                    custom_id: form_c.custom_id, // 个人分类
+                    tag: form_c.tag, // 获取标签数据
+                    abstract: form_c.abstract, //文章摘要
+                    blog_type: form_c.blog_type, // 文章类型
+                    copy_code: form_c.copy_code, //转载声明
+                    is_hide: form_c.is_hide, // 获取公开私密 $model->is_comment
+                    top_time: form_c.top_time, // 是否置顶
+                    is_comment: form_c.is_comment, //禁止评论
+                    banner_type: form_c.banner_type,
+                    img_urls: form_c.img_urls
+                }
+                var b_status = $data.form.blog_id ? true : false
+                var submitData = $.extend({}, oldDialogForm, {
+                    type: b_status ? 'blog' : 'draft',
+                    id: b_status ? $data.form.blog_id : $data.form.did
+                })
+                $.ajax({
+                    type: "post",
+                    url: blog_url + "blogger/base-save",
+                    data: submitData,
+                    dataType: "json",
+                    success: function (response) {
+                        $methods.changeSubmitText('确认', false)
+                        if (response.status) {
+                            $methods.showTip('基础信息保存成功')
+                            $methods.changePop(0, 'editor-dialog__wrapper')
+                        } else {
+                            $methods.showTip(response.message)
+                        }
+                    },
+                    error: function (error) {
+                        $methods.changeSubmitText('确认', false)
+                    }
+                });
+            },
+            changeSubmitText: function (text, status) {
+                $('#submitForm').text(text).attr('disabled', status)
+            },
+            // 保存草稿
+            drafForm: function (callback, auto_save) {
+                if (blogId) {
+                    isSave = false
+                    return
+                }
+                var titleValue = $data.form.title
+                var input_val = $('.current-num').text()
+
+                if (titleValue || ($data.form.content && (input_val != 0 || $data.form.content.includes('img') || $data.form.content.includes('table') || $data.form.content.includes('pre')))) {
+                    if (auto_save) {
+                        $('.save-draft').text('草稿保存中...')
+                        $('.save-loading').show()
+                        $('.editorright').removeClass('edit_save').hide()
+                    }
+                    isSave = true
+                    var isFrist = $data.form.did
+                    var formData = $methods.sendFormData($data.form)
+                    $.ajax({
+                        type: "post",
+                        url: blog_url + "blogger/draft",
+                        data: formData,
+                        dataType: "json",
+                        success: function (res) {
+                            if (res.status == -9 && res.msg.indexOf('未登') != -1) {
+                                localStorage.setItem('nologindraft', JSON.stringify({
+                                    'type': 0,
+                                    'form': $data.form
+                                }))
+                                var localHref = window.location.href
+                                window.location.href = option.homeUrl + 'index?reback=' + localHref
+                                return
+                            }
+                            //第一次保存时才会查询草稿数量
+                            if (!isFrist) {
+                                $methods.getDraftNum()
+                            }
+                            isSave = false;
+
+
+                            localStorage.setItem('userDraft', JSON.stringify(formData))
+
+                            if (res.status == 1) {
+                                if (auto_save) {
+                                    setTimeout(function () {
+                                        $(".save-loading").hide()
+                                        $('.editorright').addClass('edit_save').show()
+                                        $('.save-draft').text('已保存')
+                                    }, 1500)
+                                 
+                                } else {
+                                    $methods.showTip('已保存')
+
+                                }
+                                $data.form.did = res.data.did
+
+
+                                var c_time = $methods.getFormatDate()
+                              
+                                $('.draft-save-time').text(c_time).show()
+
+                                if (callback) {
+                                    callback()
+                                }
+
+                            }
+                        },
+                        error: function (err) {
+                            isSave = false
+                            $('.save-draft').text('草稿将自动保存')
+                        }
+                    });
+                } else {
+                    isSave = false
+                    if (!auto_save){
+                        $methods.showTip('正文和标题不能都为空')
+                    }
+                }
+
+            },
+            getFormatDate: function () {
+                var nowDate = new Date();
+                var year = nowDate.getFullYear();
+                var month = nowDate.getMonth() + 1 < 10 ? "0" + (nowDate.getMonth() + 1) : nowDate.getMonth() + 1;
+                var date = nowDate.getDate() < 10 ? "0" + nowDate.getDate() : nowDate.getDate();
+                var hour = nowDate.getHours() < 10 ? "0" + nowDate.getHours() : nowDate.getHours();
+                var minute = nowDate.getMinutes() < 10 ? "0" + nowDate.getMinutes() : nowDate.getMinutes();
+                var second = nowDate.getSeconds() < 10 ? "0" + nowDate.getSeconds() : nowDate.getSeconds();
+                return year + "-" + month + "-" + date + "   " + hour + ":" + minute + ":" + second;
+            },
+            // 编辑设置
+            getFilterName: function (dataList, val) {
+                var filterData = dataList.filter(function (item) {
+                    return item.id == val
+                })
+                return filterData[0].name
+            },
+            // 编辑文章分类设置
+            setSelectName: function (dom, id) {
+                var text = $('.' + dom + ' .select_item[value=' + id + ']').children('span').text()
+                $('.' + dom).find('.pull-down').val(text)
+            },
+            // 切换编辑器
+            changeEditor: function () {
+                localStorage.removeItem('userDraft')
+                window.location.href = ($data.form.is_old == 1 || $data.form.is_old == 2) ? blog_url + 'blogger/publish' : blog_url + 'blogger/publish?old=1'
+            },
+            // 违禁词提示模板
+            getBlack: function (title, tip) {
+                return '<div class="item">' +
+                    '<img src="' + img_url + 'images/editor/tip.png">' +
+                    '<div class="tip_list">' +
+                    '<label>博客' + title + '：</label>' +
+                    '<div class="c_tip_list">' + tip + '</div>' +
+                    '</div>' +
+                    '<div class="clear"></div>' +
+                    '</div>'
+            },
+            // 修改弹窗的发布文字
+            changeDialogText: function () {
+                if ($('.base-settings').length > 0) {
+                    $('#submitForm').text("确认").addClass('baseinfo')
+                } else {
+                    $('#submitForm').text("发布")
+                }
+            },
+            preview: function (file) {
+                $('.img-error').hide()
+                if (file.files && file.files[0]) {
+                    var sizeLimit = 2048000
+                    if (file.files[0].size > sizeLimit) return ($('.upload_input').val('') && $methods.showTip('上传图片需小于1.9M'))
+                    $('.add-img .iconeditor').removeClass('editortianjiabeifen').addClass('editorjiazaizhongbeifen')
+                    $methods.uploadNow(file.files[0], function (url) {
+                        var replaceIndex = $data.replaceIndex
+                        if (replaceIndex == -1) {
+                            var c_img_urls = $data.form.img_urls
+                            if (c_img_urls.length >= 3) return
+                            $data.form.img_urls.push(url)
+                        } else {
+                            $data.form.img_urls[replaceIndex] = url
+                            $data.replaceIndex = -1
+                        }
+                        $methods.judgeImgCover()
+                        $('.add-img .iconeditor').removeClass('editorjiazaizhongbeifen').addClass('editortianjiabeifen')
+                    })
+                    $('.upload_input').val('')
+                }
+            },
+            loadImg: function (obj) {
+                var loadingDom = $(this).siblings('.add-img').children('.editorjiazaizhongbeifen')
+                if (loadingDom.length > 0) return
+                var index = $(obj).parent('.img-item').index()
+                $data.replaceIndex = index
+                $('.upload_input').click()
+            },
+            deleteImg: function (obj) {
+                var $this = $(obj),
+                    parent = $this.parent('.img-item'),
+                    index = parent.index()
+                $data.form.img_urls.splice(index, 1)
+                $methods.judgeImgCover()
+            },
+            judgeAddImgStatus: function () { // 判断是否可以增加图片
+                var type = $data.form.banner_type
+                var imgItemLen = $('.img-item').length
+                imgItemLen == type ? $('.upload-img').hide() : $('.upload-img').show()
+            },
+            judgeImgCover: function () {
+                var type = $data.form.banner_type
+                if (type == 0) return ($('.selected-img').html("") && $('.select-img-content').hide())
+                var addImgArr = $data.form.img_urls,
+                    imgArr = []
+                if (type == 1) imgArr = addImgArr[0] ? [addImgArr[0]] : []
+                if (type == 3) {
+                    imgArr = addImgArr
+                }
+                $methods.setImgCover(imgArr)
+            },
+            setImgCover: function (imgArr) { // 图片拼接
+                var allImgStr = imgArr.reduce(function (all, cur) {
+                    if (cur) {
+                        all += '<div class="img-item">' +
+                            '<div class="delete" onclick="blog_detail.methods.deleteImg(this)"><i class="iconeditor editorshanchutupianbeifen"></i></div>' +
+                            '<div class="cover-img"><img src="' + cur + '" alt=""></div>' +
+                            '<button class="replace" onclick="blog_detail.methods.loadImg(this)">替换</button>' +
+                            '</div>'
+                    }
+                    return all
+                }, '')
+                $('.selected-img').html(allImgStr)
+                $('.select-img-content').show()
+                $methods.judgeAddImgStatus()
+            },
+            getImgTypeData: function () { // 检测封面
+                var banner_type = $data.form.banner_type,
+                    img_urls = $data.form.img_urls
+                img_urls.length < banner_type ? $('.img-error').show() : $('.img-error').hide()
+                return img_urls.length >= banner_type
+            }
+
+        }
+    }
+    blog_detail.init()
+})
+
+// 隐藏展示回到顶端
+function returnTop() {
+    var goTopDom = $('.tooltip-back')
+    $(window).scroll(function () {
+        var scrollTop = $(document).scrollTop()
+        if (goTopDom) {
+            var statusStr = scrollTop > 1200 ? 'block' : 'none'
+            goTopDom.css('display', statusStr)
+        }
+        var header = $('.editor-header')
+        if (scrollTop > 70) {
+            // header.addClass('header-fixed')
+            // console.log(blog_detail.data.form.title)
+            // if (scrollTop > window.document.body.clientHeight - 200 && !blog_detail.data.form.title) {
+            //     let dom = document.getElementById("title");
+            //     blog_detail.methods.showTip('请输入标题')
+            //     const offsetTop = dom.offsetTop;
+            //     document.body.scrollTop = document.documentElement.scrollTop =
+            //         offsetTop;
+
+            // }
+        } else {
+            // $('.editor-header').removeClass('header-fixed')
+        }
+
+    });
+}
+var isWindows = function () {
+    return /windows|win32/i.test(navigator.userAgent);
+}();
+let userAgentName = isWindows ? 'Ctrl' : '⌘'
+var shortcutKey = [
+    {
+        title: "常用快捷键",
+        id: "1",
+        child: [
+            {
+                name: "粗体",
+                itemClass: "iconeditor editorblod",
+                key: "B",
+            },
+            {
+                name: "斜体",
+                itemClass: "iconeditor editorItalic1",
+                key: "I",
+            },
+            {
+                name: "下划线",
+                itemClass: "iconeditor editorUnderscore",
+                key: "U",
+            },
+            {
+                name: "删除线",
+                itemClass: "iconeditor editorStrikethrough",
+                key: "Shift+X",
+            },
+            {
+                name: "链接",
+                itemClass: "iconeditor editorlink",
+                key: "K",
+            },
+
+            {
+                name: "标题2",
+                itemClass: "iconeditor editorbiaotiH2beifen",
+                key: "Alt/Opt+2",
+            },
+            {
+                name: "标题3",
+                itemClass: "iconeditor editorbiaotiH3beifen",
+                key: "Alt/Opt+3",
+            },
+            {
+                name: "标题4",
+                itemClass: "iconeditor editorbiaotiH4beifen",
+                key: "Alt/Opt+4",
+            },
+            {
+                name: "标题5",
+                itemClass: "iconeditor editorbiaotiH5beifen",
+                key: "Alt/Opt+5",
+            },
+            {
+                name: "标题6",
+                itemClass: "iconeditor editorbiaotiH6beifen",
+                key: "Alt/Opt+6",
+            },
+            {
+                name: "插入卡片",
+                itemClass: "iconeditor editorcharukapianbeifen",
+                key: "/拼音,英文,别名",
+            },
+        ],
+    },
+    {
+        title: "MarkDown写法快捷键",
+        id: "1",
+        child: [
+            {
+                name: "标题2",
+                itemClass: "iconeditor editorbiaotiH2beifen",
+                key: "Space",
+                keyFrist: '##'
+            },
+
+            {
+                name: "标题3",
+                itemClass: "iconeditor editorbiaotiH3beifen",
+                key: "Space",
+                keyFrist: '###'
+            },
+            {
+                name: "标题4",
+                itemClass: "iconeditor editorbiaotiH4beifen",
+                key: "Space",
+                keyFrist: '####'
+            },
+            {
+                name: "标题5",
+                itemClass: "iconeditor editorbiaotiH5beifen",
+                key: "Space",
+                keyFrist: '#####'
+            },
+            {
+                name: "标题6",
+                itemClass: "iconeditor editorbiaotiH6beifen",
+                key: "Space",
+                keyFrist: '######'
+            },
+
+            {
+                name: "有序列表",
+                itemClass: "iconeditor editorOrderly",
+                key: "Space",
+                keyFrist: '1.'
+
+            },
+            {
+                name: "无序列表",
+                itemClass: "iconeditor editordisorder",
+                key: "Space",
+                keyFrist: '*'
+
+            },
+            {
+                name: "引用",
+                itemClass: "iconeditor editorquote",
+                key: "Space",
+                keyFrist: '>'
+
+            },
+            {
+                name: "代码块",
+                itemClass: "iconeditor editorCode1",
+                key: "Enter",
+                keyFrist: '```'
+            },
+            {
+                name: "分割线",
+                itemClass: "iconeditor editorStrikethrough",
+                key: "Enter",
+                keyFrist: '---'
+
+            },
+            {
+                name: "粗体",
+                itemClass: "iconeditor editorblod",
+                key: "Space",
+                keyFrist: '**粗体**'
+            },
+            {
+                name: "斜体",
+                itemClass: "iconeditor editorUnlink",
+                key: "Space",
+                keyFrist: '_斜体_'
+            },
+            {
+                name: "删除线",
+                itemClass: "iconeditor editorStrikethrough",
+                key: "Space",
+                keyFrist: '~~删除线~~'
+            },
+            {
+                name: "代码",
+                itemClass: "iconeditor editorhangneidaimabeifen",
+                key: "Space",
+                keyFrist: '`Code`'
+            },
+            {
+                name: "上标",
+                itemClass: "iconeditor editorshangbiaobeifen",
+                key: "Space",
+                keyFrist: '^th^'
+            },
+            {
+                name: "下标",
+                itemClass: "iconeditor editorxiabiaobeifen",
+                key: "Space",
+                keyFrist: '~2~'
+            },
+            {
+                name: "高亮",
+                itemClass: "iconeditor editorgaoliangxianshibeifen",
+                key: "Space",
+                keyFrist: '==高亮=='
+            },
+            {
+                name: "链接",
+                itemClass: "iconeditor editorlink",
+                key: "Space",
+                keyFrist: '[标题](URL)'
+            },
+        ],
+    },
+]
+var helperDom = function (arr) {
+    let text = '';
+    for (var i = 0; i < arr.length; i++) {
+
+        let content = ''
+        arr[i].child.forEach(item => {
+            content = content + `<div class="shortcut—key-item" >
+            <i class="${item.itemClass}   shortcut—key-item-icon"></i>
+                 <span class="shortcut—key-item-name">${item.name}</span>
+                 <div class="shortcut—key-item-key">
+                   <span >${item.keyFrist ? item.keyFrist : userAgentName}</span> +
+                  <span >${item.key}</span>
+                 </div>
+              </div>`
+        })
+        text = text + `<div class="shortcut—key">
+       <div class="shortcut—key-title" > ${arr[i].title}</div>
+       ${content}
+       </div>`
+
+    }
+    $('#c-edit-helper-content-list').html(text)
+
+
+}
+$(document).ready(function () {
+    document.body.scrollTop = 0
+    returnTop()
+    helperDom(shortcutKey)
+})
